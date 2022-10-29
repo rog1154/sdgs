@@ -1,0 +1,184 @@
+{% extends 'base.html' %}
+{% block head %}
+<link rel="stylesheet" href="/static/css/style.css">
+{% endblock %}
+{% block body %}
+<div id="game">
+    <div id="player1">
+        <p id="player1_archivement" v-if="sit">目標:[[archivement]]</p>
+        <p id="player1_deck" v-if="sit">山札:[[deck]]</p>
+        <p id="player1_resource" v-if="sit">リソース[[resource]]</p>
+        <p id="player1_hand" v-if="sit">手札:[[hand]]</p>
+        <p id="player1_target" v-if="sit">公約:[[target]]</p>
+        <input v-else type="button" value="着席" @click="sitdown()">
+    </div>
+    <p id="field">場:[[field]]</p>
+    <div class="box" id="chat">
+        <p v-for="message in messages">[[message]]</p>
+        <div id="scroll"></div>
+    </div>
+    <div id="player2">
+        <p id="player2_archivement" v-if="sit">目標:[[archivement]]</p>
+        <p id="player2_deck" v-if="sit">山札:[[deck]]</p>
+        <p id="player2_resource" v-if="sit">リソース[[resource]]</p>
+        <p id="player2_hand" v-if="sit">手札:[[hand]]</p>
+        <p id="player2_target" v-if="sit">公約:[[target]]</p>
+        <input v-else type="button" value="着席" @click="sitdown()">
+    </div>
+    <div id="button">
+        <input v-if="mode == 'start'" type="button" value="ゲーム開始" @click="start()">
+        <div v-if="myturn">
+            <input v-if="mode == 'event'" type="button" value="イベントの使用" @click="event()">
+            <input v-if="mode == 'event'" type="button" value="パス" @click="use()">
+            <input v-if="mode == 'buy'" type="number" id="number">
+            <input v-if="mode == 'buy'" type="button" value="購入" @click="choise()">
+            <input v-if="mode == 'buy'" type="button" value="パス" @click="add()">
+            <input v-if="welfare" type="button" value="自然→健康" @click="exchange('福祉','自然')">
+            <input v-if="welfare" type="button" value="技術→健康" @click="exchange('福祉','技術')">
+            <input v-if="welfare" type="button" value="文化→健康" @click="exchange('福祉','文化')">
+            <input v-if="mode == 'add'" type="button" value="自然" @click="end('自然')">
+            <input v-if="mode == 'add'" type="button" value="技術" @click="end('技術')">
+            <input v-if="mode == 'add'" type="button" value="文化" @click="end('文化')">
+            <input v-if="mode == 'add'" type="button" value="健康" @click="end('健康')">
+            <input v-if="mode == 'add'" type="button" value="資金" @click="end('資金')">
+        </div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/vue@next"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/3.0.4/socket.io.js" integrity="sha512-aMGMvNYu8Ue4G+fHa359jcPb1u+ytAF+P2SCb+PxrjCdO3n3ZTxJ30zuH39rimUggmTwmh2u7wvQsDTHESnmfQ==" crossorigin="anonymous"></script>
+<script type="text/javascript" charset="utf-8">
+    var socket = io();
+    var info_js = {{info|tojson}};
+    var me = 'no';
+    var turn_player;
+    var player1_app = Vue.createApp({
+            data(){
+                return{
+                    archivement:info_js.player1_archivement,
+                    deck:info_js.player1_deck,
+                    resource:info_js.player1_resource,
+                    hand:info_js.player1_hand,
+                    target:info_js.player1_target,
+                    sit:false
+                }
+            },
+            methods:{
+                sitdown(){
+                    if(me == 'no'){
+                        me = 'player1'
+                        socket.emit('sitdown',me)
+                    }
+                }
+            },
+            delimiters:['[[',']]']
+    }).mount('#player1')
+    var player2_app = Vue.createApp({
+            data(){
+                return{
+                    archivement:info_js.player2_archivement,
+                    deck:info_js.player2_deck,
+                    resource:info_js.player2_resource,
+                    hand:info_js.player2_hand,
+                    target:info_js.player2_target,
+                    sit:false
+                }
+            },
+            methods:{
+                sitdown(){
+                   if(me == 'no'){
+                        me = 'player2'
+                        socket.emit('sitdown',me)
+                    }
+                }
+            },
+            delimiters:['[[',']]']
+    }).mount('#player2')
+    var field_app = Vue.createApp({
+        data(){
+            return{
+                field:info_js.field
+            }
+        },
+        delimiters:['[[',']]']
+    }).mount('#field')
+    var chat_app = Vue.createApp({
+        data(){
+            return{
+                messages:[]
+            }
+        },
+        updated(){
+            let target = document.getElementById('scroll');
+            target.scrollIntoView(false);
+        },
+        delimiters:['[[',']]']
+    }).mount('#chat')
+    var button_app = Vue.createApp({
+        data(){
+            return{
+                mode:'start',
+                myturn:me == turn_player,
+                welfare:false
+            }
+        },
+        methods:{
+            start(){
+                socket.emit('game_start')
+            },
+            event(){
+                socket.emit('event',me)
+            },
+            use(){
+                socket.emit('use',me)
+            },
+            exchange(goal,resource){
+                socket.emit('exchange',me,goal,resource)
+            },
+            choise(){
+                var num = document.getElementById("number").value;
+                socket.emit('buy',me,num)
+            },
+            add(){
+                this.welfare = false
+                socket.emit('add',me)
+            },
+            end(resource){
+                socket.emit('end',me,resource)
+            }
+        },
+        delimiters:['[[',']]']
+    }).mount('#button')
+    socket.on('chat', function(msg){
+        chat_app.messages.push(msg)
+    })
+    socket.on('update', function(info) {
+        info_js = {{info|tojson}}
+        field_app.field = info.field
+        player1_app.sit = info.player1_sit
+        player1_app.archivement = info.player1_archivement
+        player1_app.hand = info.player1_hand
+        player1_app.resource = info.player1_resource
+        player1_app.deck = info.player1_deck
+        player1_app.target = info.player1_target
+        player2_app.sit = info.player2_sit
+        player2_app.archivement = info.player2_archivement
+        player2_app.hand = info.player2_hand
+        player2_app.resource = info.player2_resource
+        player2_app.deck = info.player2_deck
+        player2_app.target = info.player2_target
+    });
+    socket.on('mode_change',function(mode){
+        button_app.mode = mode
+    })
+    socket.on('turn_change',function(player){
+        turn_player = player
+        button_app.myturn = (me == turn_player)
+    })
+    socket.on('exchange',function(name){
+        if(name == '福祉'){
+            button_app.welfare = true
+        }
+    })
+</script>
+{% endblock %}
